@@ -46,32 +46,27 @@ const MapView = ({ segments }) => {
     });
   }, []);
 
-useEffect(() => {
+  useEffect(() => {
     if (!mapInstanceRef.current || !window.kakao) return;
     const completed = segments.filter(s => s.bus && s.from && s.to);
     if (completed.length === 0) return;
 
     completed.forEach(async (seg, i) => {
       const color = COLORS[i % COLORS.length];
-      
       try {
         const res = await fetch("/.netlify/functions/route", {
           method: "POST",
           body: JSON.stringify({ origin: seg.from, destination: seg.to })
         });
         const data = await res.json();
-        
         if (!data.routeData || !data.routeData.routes) return;
-        
         const route = data.routeData.routes[0];
         const path = [];
-        
         route.sections[0].roads.forEach(road => {
           for (let j = 0; j < road.vertexes.length; j += 2) {
             path.push(new window.kakao.maps.LatLng(road.vertexes[j + 1], road.vertexes[j]));
           }
         });
-
         const polyline = new window.kakao.maps.Polyline({
           path,
           strokeWeight: 5,
@@ -80,7 +75,6 @@ useEffect(() => {
           strokeStyle: "solid",
         });
         polyline.setMap(mapInstanceRef.current);
-
         new window.kakao.maps.Marker({
           position: new window.kakao.maps.LatLng(data.originCoord.y, data.originCoord.x),
           map: mapInstanceRef.current
@@ -89,32 +83,12 @@ useEffect(() => {
           position: new window.kakao.maps.LatLng(data.destCoord.y, data.destCoord.x),
           map: mapInstanceRef.current
         });
-
         mapInstanceRef.current.setCenter(
           new window.kakao.maps.LatLng(data.originCoord.y, data.originCoord.x)
         );
       } catch (e) {
         console.error("경로 조회 실패:", e);
       }
-    });
-  }, [segments]);
-
-      Promise.all([searchPlace(seg.from), searchPlace(seg.to)]).then(([fromLatLng, toLatLng]) => {
-        if (!fromLatLng || !toLatLng) return;
-        const polyline = new window.kakao.maps.Polyline({
-          path: [fromLatLng, toLatLng],
-          strokeWeight: 5,
-          strokeColor: color,
-          strokeOpacity: 0.9,
-          strokeStyle: "solid",
-        });
-        polyline.setMap(mapInstanceRef.current);
-
-        new window.kakao.maps.Marker({ position: fromLatLng, map: mapInstanceRef.current });
-        new window.kakao.maps.Marker({ position: toLatLng, map: mapInstanceRef.current });
-
-        mapInstanceRef.current.setCenter(fromLatLng);
-      });
     });
   }, [segments]);
 
@@ -154,7 +128,6 @@ const EditModal = ({ segment, segIndex, onSave, onClose }) => {
 
   const handleBusSelect = async (bus) => {
     setLoading(true);
-    console.log("버스 선택됨:", bus);
     const stopList = await getBusStops(bus.number);
     setStops(stopList);
     setDraft({ ...draft, bus, from: "", to: "" });
@@ -181,11 +154,11 @@ const EditModal = ({ segment, segIndex, onSave, onClose }) => {
 
         {step === 1 && (
           <div>
-            <input value={search} onChange={e => handleSearch(e.target.value)} placeholder="버스 번호 검색 (예: 1, 51, 160...)" style={{ width: "100%", padding: "12px 16px", borderRadius: 12, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", fontSize: 15, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
+            <input value={search} onChange={e => handleSearch(e.target.value)} placeholder="버스 번호 검색 (예: 좌석02, 순환01...)" style={{ width: "100%", padding: "12px 16px", borderRadius: 12, background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.15)", color: "#fff", fontSize: 15, outline: "none", boxSizing: "border-box", marginBottom: 14 }} />
             {loading && <div style={{ color: "rgba(255,255,255,0.4)", textAlign: "center", padding: 20 }}>검색 중...</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {busResults.map(bus => (
-                <button key={bus.id} onClick={() => handleBusSelect(bus)} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "14px 18px", cursor: "pointer", textAlign: "left", color: "#fff" }}>
+                <button key={bus.number} onClick={() => handleBusSelect(bus)} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "14px 18px", cursor: "pointer", textAlign: "left", color: "#fff" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 18, fontWeight: 800 }}>{bus.number}번</span>
                     <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{bus.name}</span>
