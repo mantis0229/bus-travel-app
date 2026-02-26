@@ -51,21 +51,53 @@ useEffect(() => {
     const completed = segments.filter(s => s.bus && s.from && s.to);
     if (completed.length === 0) return;
 
-    const geocoder = new window.kakao.maps.services.Places();
-
-    completed.forEach((seg, i) => {
+    completed.forEach(async (seg, i) => {
       const color = COLORS[i % COLORS.length];
-      const points = [];
-
-      const searchPlace = (name) => new Promise((resolve) => {
-        geocoder.keywordSearch(name + " 광주", (result, status) => {
-          if (status === window.kakao.maps.services.Status.OK) {
-            resolve(new window.kakao.maps.LatLng(result[0].y, result[0].x));
-          } else {
-            resolve(null);
+      
+      try {
+        const res = await fetch("/.netlify/functions/route", {
+          method: "POST",
+          body: JSON.stringify({ origin: seg.from, destination: seg.to })
+        });
+        const data = await res.json();
+        
+        if (!data.routeData || !data.routeData.routes) return;
+        
+        const route = data.routeData.routes[0];
+        const path = [];
+        
+        route.sections[0].roads.forEach(road => {
+          for (let j = 0; j < road.vertexes.length; j += 2) {
+            path.push(new window.kakao.maps.LatLng(road.vertexes[j + 1], road.vertexes[j]));
           }
         });
-      });
+
+        const polyline = new window.kakao.maps.Polyline({
+          path,
+          strokeWeight: 5,
+          strokeColor: color,
+          strokeOpacity: 0.9,
+          strokeStyle: "solid",
+        });
+        polyline.setMap(mapInstanceRef.current);
+
+        new window.kakao.maps.Marker({
+          position: new window.kakao.maps.LatLng(data.originCoord.y, data.originCoord.x),
+          map: mapInstanceRef.current
+        });
+        new window.kakao.maps.Marker({
+          position: new window.kakao.maps.LatLng(data.destCoord.y, data.destCoord.x),
+          map: mapInstanceRef.current
+        });
+
+        mapInstanceRef.current.setCenter(
+          new window.kakao.maps.LatLng(data.originCoord.y, data.originCoord.x)
+        );
+      } catch (e) {
+        console.error("경로 조회 실패:", e);
+      }
+    });
+  }, [segments]);
 
       Promise.all([searchPlace(seg.from), searchPlace(seg.to)]).then(([fromLatLng, toLatLng]) => {
         if (!fromLatLng || !toLatLng) return;
