@@ -46,7 +46,7 @@ const MapView = ({ segments }) => {
     });
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
     if (!mapInstanceRef.current || !window.kakao) return;
     const completed = segments.filter(s => s.bus && s.from && s.to);
     if (completed.length === 0) return;
@@ -59,22 +59,31 @@ const MapView = ({ segments }) => {
           body: JSON.stringify({ origin: seg.from, destination: seg.to })
         });
         const data = await res.json();
-        if (!data.routeData || !data.routeData.routes) return;
-        const route = data.routeData.routes[0];
-        const path = [];
-        route.sections[0].roads.forEach(road => {
-          for (let j = 0; j < road.vertexes.length; j += 2) {
-            path.push(new window.kakao.maps.LatLng(road.vertexes[j + 1], road.vertexes[j]));
-          }
+
+        if (!data.odsayData || !data.odsayData.result || !data.odsayData.result.path) {
+          console.log("ODsay 경로 없음:", data);
+          return;
+        }
+
+        const path = data.odsayData.result.path[0];
+        const subPaths = path.subPath;
+        
+        subPaths.forEach(sub => {
+          if (!sub.passStopList) return;
+          const coords = sub.passStopList.stations.map(s =>
+            new window.kakao.maps.LatLng(s.y, s.x)
+          );
+          if (coords.length < 2) return;
+          const polyline = new window.kakao.maps.Polyline({
+            path: coords,
+            strokeWeight: 5,
+            strokeColor: color,
+            strokeOpacity: 0.9,
+            strokeStyle: "solid",
+          });
+          polyline.setMap(mapInstanceRef.current);
         });
-        const polyline = new window.kakao.maps.Polyline({
-          path,
-          strokeWeight: 5,
-          strokeColor: color,
-          strokeOpacity: 0.9,
-          strokeStyle: "solid",
-        });
-        polyline.setMap(mapInstanceRef.current);
+
         new window.kakao.maps.Marker({
           position: new window.kakao.maps.LatLng(data.originCoord.y, data.originCoord.x),
           map: mapInstanceRef.current

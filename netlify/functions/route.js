@@ -11,19 +11,21 @@ exports.handler = async (event) => {
     };
   }
 
-  const REST_API_KEY = "786a0d72bee0975417b6cddb2c8a812b";
+  const KAKAO_KEY = "786a0d72bee0975417b6cddb2c8a812b";
+  const ODSAY_KEY = "gjp7wYpNUORJ20ay5NNFww";
 
   try {
     const { origin, destination } = JSON.parse(event.body);
 
+    // 카카오로 정류장 좌표 검색
     const searchCoord = async (name) => {
       const res = await fetch(
         `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(name + " 광주")}&size=1`,
-        { headers: { Authorization: `KakaoAK ${REST_API_KEY}` } }
+        { headers: { Authorization: `KakaoAK ${KAKAO_KEY}` } }
       );
       const data = await res.json();
       if (data.documents && data.documents.length > 0) {
-        return { x: data.documents[0].x, y: data.documents[0].y };
+        return { x: parseFloat(data.documents[0].x), y: parseFloat(data.documents[0].y) };
       }
       return null;
     };
@@ -37,27 +39,20 @@ exports.handler = async (event) => {
       return {
         statusCode: 200,
         headers: { "Access-Control-Allow-Origin": "*" },
-        body: JSON.stringify({ error: "좌표를 찾을 수 없어요", originCoord, destCoord })
+        body: JSON.stringify({ error: "좌표를 찾을 수 없어요" })
       };
     }
 
-    const routeRes = await fetch(
-      `https://apis-navi.kakaomobility.com/v1/directions?origin=${originCoord.x},${originCoord.y}&destination=${destCoord.x},${destCoord.y}&priority=RECOMMEND`,
-      { headers: { Authorization: `KakaoAK ${REST_API_KEY}` } }
+    // ODsay 대중교통 경로 검색
+    const odsayRes = await fetch(
+      `https://api.odsay.com/v1/api/searchPubTransPathT?SX=${originCoord.x}&SY=${originCoord.y}&EX=${destCoord.x}&EY=${destCoord.y}&apiKey=${ODSAY_KEY}`
     );
-    
-    const routeText = await routeRes.text();
-    let routeData;
-    try {
-      routeData = JSON.parse(routeText);
-    } catch(e) {
-      routeData = { error: routeText };
-    }
+    const odsayData = await odsayRes.json();
 
     return {
       statusCode: 200,
       headers: { "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ routeData, originCoord, destCoord })
+      body: JSON.stringify({ odsayData, originCoord, destCoord })
     };
   } catch (e) {
     return {
