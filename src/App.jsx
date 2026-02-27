@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { searchBus, getBusStops } from "./api";
 
 const COLORS = ["#FF6B35", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD"];
-const ODSAY_KEY = encodeURIComponent("gjp7wYpNUORJ20ay5NNFww");
 
 const RouteCard = ({ segment, index, onRemove, color }) => (
   <div style={{ background: "rgba(255,255,255,0.05)", border: `2px solid ${color}`, borderRadius: 16, padding: "20px 24px", position: "relative" }}>
@@ -30,6 +29,7 @@ const RouteCard = ({ segment, index, onRemove, color }) => (
 const MapView = ({ segments }) => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
+  const markersRef = useRef([]);
 
   useEffect(() => {
     if (!window.kakao || !mapRef.current) return;
@@ -43,49 +43,69 @@ const MapView = ({ segments }) => {
 
   useEffect(() => {
     if (!mapInstanceRef.current || !window.kakao) return;
+
+    // 기존 마커 제거
+    markersRef.current.forEach(m => m.setMap(null));
+    markersRef.current = [];
+
     const completed = segments.filter(s => s.bus && s.from && s.to);
     if (completed.length === 0) return;
 
     completed.forEach(async (seg, i) => {
       const color = COLORS[i % COLORS.length];
       try {
-        const coordRes = await fetch("/.netlify/functions/route", {
+        const res = await fetch("/.netlify/functions/route", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ origin: seg.from, destination: seg.to })
         });
-        const coordData = await coordRes.json();
-        if (!coordData.originCoord || !coordData.destCoord) return;
+        const data = await res.json();
+        if (!data.originCoord || !data.destCoord) return;
 
-        const { originCoord, destCoord } = coordData;
+        const { originCoord, destCoord } = data;
 
-        const odsayRes = await fetch(
-          `https://api.odsay.com/v1/api/searchPubTransPathT?SX=${originCoord.x}&SY=${originCoord.y}&EX=${destCoord.x}&EY=${destCoord.y}&apiKey=${ODSAY_KEY}`
-        );
-        const odsayData = await odsayRes.json();
+        // 출발 마커 (색상 원형)
+        const fromLatLng = new window.kakao.maps.LatLng(originCoord.y, originCoord.x);
+        const toLatLng = new window.kakao.maps.LatLng(destCoord.y, destCoord.x);
 
-        if (!odsayData.result || !odsayData.result.path) return;
+        const makeMarker = (latlng, label, isFrom) => {
+          const content = `<div style="background:${color};border:3px solid white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#000;box-shadow:0 2px 6px rgba(0,0,0,0.4)">${isFrom ? "출" : "도"}</div>`;
+          const overlay = new window.kakao.maps.CustomOverlay({
+            position: latlng,
+            content,
+            yAnchor: 1
+          });
+          overlay.setMap(mapInstanceRef.current);
+          markersRef.current.push(overlay);
 
-        odsayData.result.path[0].subPath.forEach(sub => {
-          if (!sub.passStopList) return;
-          const coords = sub.passStopList.stations.map(s =>
-            new window.kakao.maps.LatLng(s.y, s.x)
-          );
-          if (coords.length < 2) return;
-          new window.kakao.maps.Polyline({
-            path: coords,
-            strokeWeight: 5,
-            strokeColor: color,
-            strokeOpacity: 0.9,
-            strokeStyle: "solid",
-          }).setMap(mapInstanceRef.current);
+          // 정류장 이름 라벨
+          const labelContent = `<div style="background:rgba(0,0,0,0.7);color:white;padding:3px 8px;border-radius:10px;font-size:11px;white-space:nowrap;margin-top:2px">${label}</div>`;
+          const labelOverlay = new window.kakao.maps.CustomOverlay({
+            position: latlng,
+            content: labelContent,
+            yAnchor: -0.3
+          });
+          labelOverlay.setMap(mapInstanceRef.current);
+          markersRef.current.push(labelOverlay);
+        };
+
+        makeMarker(fromLatLng, seg.from, true);
+        makeMarker(toLatLng, seg.to, false);
+
+        // 출발-도착 직선
+        const line = new window.kakao.maps.Polyline({
+          path: [fromLatLng, toLatLng],
+          strokeWeight: 3,
+          strokeColor: color,
+          strokeOpacity: 0.6,
+          strokeStyle: "dashed",
         });
+        line.setMap(mapInstanceRef.current);
+        markersRef.current.push(line);
 
-        new window.kakao.maps.Marker({ position: new window.kakao.maps.LatLng(originCoord.y, originCoord.x), map: mapInstanceRef.current });
-        new window.kakao.maps.Marker({ position: new window.kakao.maps.LatLng(destCoord.y, destCoord.x), map: mapInstanceRef.current });
-        mapInstanceRef.current.setCenter(new window.kakao.maps.LatLng(originCoord.y, originCoord.x));
+        mapInstanceRef.current.setCenter(fromLatLng);
       } catch (e) {
-        console.error("경로 조회 실패:", e);
+        console.error("마커 표시 실패:", e);
       }
     });
   }, [segments]);
