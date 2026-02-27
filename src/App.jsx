@@ -2,33 +2,30 @@ import { useState, useEffect, useRef } from "react";
 import { searchBus, getBusStops } from "./api";
 
 const COLORS = ["#FF6B35", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD"];
+const ODSAY_KEY = encodeURIComponent("gjp7wYpNUORJ20ay5NNFww");
 
-const RouteCard = ({ segment, index, onRemove, color }) => {
-  return (
-    <div style={{ background: "rgba(255,255,255,0.05)", border: `2px solid ${color}`, borderRadius: 16, padding: "20px 24px", position: "relative", backdropFilter: "blur(10px)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#000" }}>{index + 1}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>{segment.bus ? `${segment.bus.number}번 버스` : "버스 선택 필요"}</div>
-          {segment.bus && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>{segment.bus.name}</div>}
-        </div>
-        {onRemove && (
-          <button onClick={onRemove} style={{ background: "rgba(255,100,100,0.2)", border: "1px solid rgba(255,100,100,0.4)", borderRadius: 8, padding: "4px 10px", color: "#ff8080", cursor: "pointer", fontSize: 13 }}>제거</button>
-        )}
+const RouteCard = ({ segment, index, onRemove, color }) => (
+  <div style={{ background: "rgba(255,255,255,0.05)", border: `2px solid ${color}`, borderRadius: 16, padding: "20px 24px", position: "relative" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <div style={{ width: 32, height: 32, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: "#000" }}>{index + 1}</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>{segment.bus ? `${segment.bus.number}번 버스` : "버스 선택 필요"}</div>
+        {segment.bus && <div style={{ fontSize: 13, color: "rgba(255,255,255,0.5)" }}>{segment.bus.name}</div>}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>출발 정류장</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: segment.from ? color : "rgba(255,255,255,0.3)" }}>{segment.from || "—"}</div>
-        </div>
-        <div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>도착 정류장</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: segment.to ? color : "rgba(255,255,255,0.3)" }}>{segment.to || "—"}</div>
-        </div>
+      {onRemove && <button onClick={onRemove} style={{ background: "rgba(255,100,100,0.2)", border: "1px solid rgba(255,100,100,0.4)", borderRadius: 8, padding: "4px 10px", color: "#ff8080", cursor: "pointer", fontSize: 13 }}>제거</button>}
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>출발 정류장</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: segment.from ? color : "rgba(255,255,255,0.3)" }}>{segment.from || "—"}</div>
+      </div>
+      <div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>도착 정류장</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: segment.to ? color : "rgba(255,255,255,0.3)" }}>{segment.to || "—"}</div>
       </div>
     </div>
-  );
-};
+  </div>
+);
 
 const MapView = ({ segments }) => {
   const mapRef = useRef(null);
@@ -37,16 +34,14 @@ const MapView = ({ segments }) => {
   useEffect(() => {
     if (!window.kakao || !mapRef.current) return;
     window.kakao.maps.load(() => {
-      const container = mapRef.current;
-      const options = {
+      mapInstanceRef.current = new window.kakao.maps.Map(mapRef.current, {
         center: new window.kakao.maps.LatLng(35.1595, 126.8526),
         level: 8,
-      };
-      mapInstanceRef.current = new window.kakao.maps.Map(container, options);
+      });
     });
   }, []);
 
- useEffect(() => {
+  useEffect(() => {
     if (!mapInstanceRef.current || !window.kakao) return;
     const completed = segments.filter(s => s.bus && s.from && s.to);
     if (completed.length === 0) return;
@@ -54,47 +49,41 @@ const MapView = ({ segments }) => {
     completed.forEach(async (seg, i) => {
       const color = COLORS[i % COLORS.length];
       try {
-        const res = await fetch("/.netlify/functions/route", {
+        const coordRes = await fetch("/.netlify/functions/route", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ origin: seg.from, destination: seg.to })
         });
-        const data = await res.json();
+        const coordData = await coordRes.json();
+        if (!coordData.originCoord || !coordData.destCoord) return;
 
-        if (!data.odsayData || !data.odsayData.result || !data.odsayData.result.path) {
-          console.log("ODsay 경로 없음:", data);
-          return;
-        }
+        const { originCoord, destCoord } = coordData;
 
-        const path = data.odsayData.result.path[0];
-        const subPaths = path.subPath;
-        
-        subPaths.forEach(sub => {
+        const odsayRes = await fetch(
+          `https://api.odsay.com/v1/api/searchPubTransPathT?SX=${originCoord.x}&SY=${originCoord.y}&EX=${destCoord.x}&EY=${destCoord.y}&apiKey=${ODSAY_KEY}`
+        );
+        const odsayData = await odsayRes.json();
+
+        if (!odsayData.result || !odsayData.result.path) return;
+
+        odsayData.result.path[0].subPath.forEach(sub => {
           if (!sub.passStopList) return;
           const coords = sub.passStopList.stations.map(s =>
             new window.kakao.maps.LatLng(s.y, s.x)
           );
           if (coords.length < 2) return;
-          const polyline = new window.kakao.maps.Polyline({
+          new window.kakao.maps.Polyline({
             path: coords,
             strokeWeight: 5,
             strokeColor: color,
             strokeOpacity: 0.9,
             strokeStyle: "solid",
-          });
-          polyline.setMap(mapInstanceRef.current);
+          }).setMap(mapInstanceRef.current);
         });
 
-        new window.kakao.maps.Marker({
-          position: new window.kakao.maps.LatLng(data.originCoord.y, data.originCoord.x),
-          map: mapInstanceRef.current
-        });
-        new window.kakao.maps.Marker({
-          position: new window.kakao.maps.LatLng(data.destCoord.y, data.destCoord.x),
-          map: mapInstanceRef.current
-        });
-        mapInstanceRef.current.setCenter(
-          new window.kakao.maps.LatLng(data.originCoord.y, data.originCoord.x)
-        );
+        new window.kakao.maps.Marker({ position: new window.kakao.maps.LatLng(originCoord.y, originCoord.x), map: mapInstanceRef.current });
+        new window.kakao.maps.Marker({ position: new window.kakao.maps.LatLng(destCoord.y, destCoord.x), map: mapInstanceRef.current });
+        mapInstanceRef.current.setCenter(new window.kakao.maps.LatLng(originCoord.y, originCoord.x));
       } catch (e) {
         console.error("경로 조회 실패:", e);
       }
@@ -102,10 +91,10 @@ const MapView = ({ segments }) => {
   }, [segments]);
 
   return (
-    <div style={{ borderRadius: 20, overflow: "hidden", position: "relative", height: "100%", minHeight: 400 }}>
+    <div style={{ borderRadius: 20, overflow: "hidden", position: "relative", minHeight: 400 }}>
       <div ref={mapRef} style={{ width: "100%", height: 400 }} />
       {segments.filter(s => s.bus && s.from && s.to).length > 0 && (
-        <div style={{ position: "absolute", bottom: 16, left: 16, background: "rgba(0,0,0,0.7)", borderRadius: 12, padding: "10px 14px", backdropFilter: "blur(10px)" }}>
+        <div style={{ position: "absolute", bottom: 16, left: 16, background: "rgba(0,0,0,0.7)", borderRadius: 12, padding: "10px 14px" }}>
           {segments.filter(s => s.bus && s.from && s.to).map((seg, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: i < segments.length - 1 ? 6 : 0 }}>
               <div style={{ width: 20, height: 4, borderRadius: 2, background: COLORS[i % COLORS.length] }} />
@@ -130,15 +119,13 @@ const EditModal = ({ segment, segIndex, onSave, onClose }) => {
     setSearch(keyword);
     if (keyword.length < 1) { setBusResults([]); return; }
     setLoading(true);
-    const results = await searchBus(keyword);
-    setBusResults(results);
+    setBusResults(await searchBus(keyword));
     setLoading(false);
   };
 
   const handleBusSelect = async (bus) => {
     setLoading(true);
-    const stopList = await getBusStops(bus.number);
-    setStops(stopList);
+    setStops(await getBusStops(bus.number));
     setDraft({ ...draft, bus, from: "", to: "" });
     setLoading(false);
     setStep(2);
