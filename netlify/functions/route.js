@@ -20,7 +20,7 @@ exports.handler = async (event) => {
     // 카카오로 정류장 좌표 검색
     const searchCoord = async (name) => {
       const res = await fetch(
-        `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(name + " 광주")}&size=1`,
+        `https://dapi.kakao.com/v2/local/search/keyword.json?query=${encodeURIComponent(name + " 광주 버스정류장")}&size=1&category_group_code=BUS_STOP`,
         { headers: { Authorization: `KakaoAK ${KAKAO_KEY}` } }
       );
       const data = await res.json();
